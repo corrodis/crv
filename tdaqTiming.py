@@ -5,14 +5,14 @@ import numpy as np
 
 ev_bad   = [ 0]
 time_bad = [43]
-ev =   [ 0,  0,  0,  8,  8,  4,  1,  2,  44,  50,  33,  50,  46,  46, 46,   33, 50,   49,  50]
-time = [29, 36, 25, 51, 53, 36, 31, 37, 148, 230, 166, 168, 158, 168, 154, 121, 163, 149, 175]
+ev =   [ 8,  8,  4,  1,  2,  44,  50,  33,  50,  46,  46, 46,   33, 50,   49,  50]
+time = [51, 53, 36, 31, 37, 148, 230, 166, 168, 158, 168, 154, 121, 163, 149, 175]
 
 two_ev   = [ 62,  65,  49,  56,  52] 
 two_time = [198, 240, 165, 182, 173]
 
-four_ev   = [ 52,  85,  81,  33] 
-four_time = [177, 260, 260, 121]
+four_ev   = [ 0,  0,  0, 52,  85,  81,  33] 
+four_time = [29, 36, 25, 177, 260, 260, 121]
 
 def func(x, a, b):
     return a + b*x
@@ -25,9 +25,9 @@ plt.plot(ev, time, 'o', label="1 FPGA")
 plt.plot(two_ev, two_time, 'd', label="2 FPGA")
 plt.plot(four_ev, four_time, '>', label="4 FPGA")
 plt.plot(ev_bad, time_bad, 'v', label="0 FPGA")
-plt.xlabel("events per uBunch")
+plt.xlabel("hits per uBunch")
 plt.ylabel("data request delay [$\mu s$]")
-plt.text(0.2, 0.82, 'delay: %.1f $\mu s$ + %.1f $\mu s$/ev' % (popt[0], popt[1]) , horizontalalignment='center',
+plt.text(0.25, 0.82, 'delay: %.1f $\mu s$ + %.1f $\mu s \cdot$ (hits/ev)' % (popt[0], popt[1]) , horizontalalignment='center',
         verticalalignment='center', transform=plt.gca().transAxes)
 plt.legend(ncol=2)
 plt.tight_layout()

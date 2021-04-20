@@ -96,12 +96,20 @@ class CRV:
             out = out + self.parse(raw).split()
         return out
 
+    def reset(self, lc=False):
+        cmd = ""
+        if lc:
+            cmd += "LC "
+        cmd += "RESET"
+        self.cmd(cmd)
+
     def readOutput(self, n=1):
         data = self.readm("21", 20*n, lc=False)
         if self.verbose:
             for n_ in range(n):
                 print(data[n_*20   :n_*20+10])
                 print(data[n_*20+10:n_*20+20])
+        return data
 
     def readTriggers(self,n=1):
         data = self.readm("20", 20*n, lc=False)
@@ -228,12 +236,12 @@ class CRV:
         print("Power cycling all FEB ports")
         self.cmd("PWRRST 25")
 
-    def febSetup(self, n_sample=10):
+    def febSetup(self, n_sample=10, port="1"):
         self.n_sample = n_sample
         print("Set external trigger to RJ45")
         self.cmd("LC TRIG 0")
-        print("Set the port the FEB is connected to: 1")
-        self.write("314","1",lc=True)
+        print("Set the port the FEB is connected to: ", port)
+        self.write("314",port,lc=True)
         print("Take new pedestral")
         self.write("316","100",lc=True)
         print("Enable self-triggering on spill gate")
@@ -242,7 +250,8 @@ class CRV:
         print("    On-spill 0x70 @ 80MHZ (Default is 0x800)")
         self.write("305", "70", lc=True)
         print("    Off-spill 0x800 @ 80Mhz")
-        self.write("306", "800", lc=True)
+        #self.write("306", "800", lc=True)
+        self.write("306", "100", lc=True) # USED in Vertical Slice Test, 400 works, 600 doesn't
         print("Number of ADC samples: ", n_sample)
         self.write("30C", hex(n_sample)[2:], lc=True)
         print("Reset DDR write/read pointers")
@@ -251,13 +260,18 @@ class CRV:
 
     def rocSetup(self, tdaq=False, tdaq_timing=False):
         print("Test Fiber Connection")
+        self.write("0", "8") # reset it
         print(self.read("1"))
         print("Enable package forwarding to the FEB")
         if tdaq_timing:
             print("Enable Marker Sync, timing from TDAQ")
-            self.write("0", hex(2**5+2**4)[2:])
+            self.write("0", hex(2**5)[2:])
+            #self.write("0", hex(2**5+2**4)[2:])
+            print("Enable Onboard PLL for external clock")
+            self.write("19","0") # power down PLL SIMON TESTED CRUCIAL! 0 -> PLL enabled
         else:
             self.write("0", "0")
+            self.write("19","1")
         print("set CSR")
         self.write("400", "A8")
         print("Reset GTP FIFO")
@@ -336,14 +350,20 @@ class CRV:
         self.write("0", "8")
         print(self.read("1"))
 
-    def setup(self, n_sample=10, tdaq=False, tdaq_timing=False, gain=0, nfpga=1, nafe=2):
+    def LP(self, port="1"):
+        cmd = "LP "+port
+        self.cmd(cmd)
+
+    def setup(self, n_sample=10, tdaq=False, tdaq_timing=False, gains=[0], nfpga=1, nafe=2, ports=["1"]):
         self.rocSetup(tdaq=tdaq, tdaq_timing=tdaq_timing)
         self.rocDdrReset()
-        self.febSetup(n_sample=n_sample)
-        for fpga in range(nfpga):
-            for afe in range(1, nafe):
-                 print("DEBUG", afe, fpga)
-                 self.febAFEHighGain(gain,afe=afe,fpga=fpga)
+        for np, port in enumerate(ports):
+            self.LP(port)
+            self.febSetup(n_sample=n_sample, port=port)
+            for fpga in range(nfpga):
+                for afe in range(1, nafe):
+                   print("DEBUG", afe, fpga)
+                   self.febAFEHighGain(gains[np],afe=afe,fpga=fpga)
 
     def markerBits(self):
         data = self.read("77", lc=False)
@@ -354,3 +374,36 @@ class CRV:
         time.sleep(0.1)
         self.getTriggers()
         return self.rocDdrReadEv()
+
+    def rocHeartbeat(self):
+        data = self.read("3D")
+        return data
+
+    def rocTriggerReq(self):
+        data = self.read("3C")
+        return data
+
+    def setPllMon(self,m="000"):
+        self.write("17", "0")
+        self.write("18", "0050") # div by 20 addr 0
+        self.write("18", "5001") # div by 80 addr 
+       
+        self.write("17","12")
+        self.write("18","42")
+        # 000: THREE-STATE OUTPUT
+        # 001: DIGITAL LOCK DETECT
+        # 010: N DIVIDER OUTPUT
+        # 011: AVDD
+        # 100: R DIVIDER OUTPUT
+        # 101: N-CHANNEL OPEN-DRAIN, LOCK DETECT
+        # 110: SERIAL DATA OUTPUT
+        # 111: DGND
+
+        bits = "00"+"0"+"100"+"100"+"0000"+"0"+"0"+"0"+"0"+m+"00"+"10"
+        bits_ = bits
+
+        print("bit pattern:", bits_,)
+        reg = "%06x" % int(bits_,2)
+        print("0x",reg)
+        self.write("17", "00"+reg[:2])
+        self.write("18", reg[2:])

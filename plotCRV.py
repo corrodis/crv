@@ -43,7 +43,7 @@ plt.plot(dfh['h:uB'].values, dfh['p:n'].values,'.')
 plt.xlabel("uB [#]")
 plt.ylabel("no of events")
 ax2 = plt.subplot(122, sharey=ax1)
-plt.hist(dfh['p:n'].values, bins=np.arange(-0.5,43.5), orientation='horizontal')
+plt.hist(dfh['p:n'].values, bins=np.arange(-0.5,52.5), orientation='horizontal')
 plt.xlabel("count")
 plt.tight_layout()
 plt.show()
@@ -84,10 +84,12 @@ for ch in range(64, 64+8):
     plt.tight_layout()
     plt.show()
 
-
+'''
 # waveforms
-dd = dfe[dfe['ch']==ch][["wf%i" % k for k in range(10)]].values
-plt.plot(dd[:30,:].T)
+n_samples = 8
+ch=64
+dd = dfe[dfe['ch']==ch][["wf%i" % k for k in range(n_samples)]].values
+plt.plot(dd[:100,:].T)
 plt.xlabel("sample")
 plt.ylabel("amplitude [adc]")
 plt.title("channel %i" % ch)
@@ -96,7 +98,7 @@ plt.show()
 
 
 # dd = dfe[dfe['ch']==ch][["wf%i" % k for k in range(10)]].values
-plt.hist2d(np.tile(np.arange(10), dd.shape[0]), dd[:,:].reshape([-1]), bins=(10, (dd.max()-dd.min())//2), cmap=plt.cm.jet)
+plt.hist2d(np.tile(np.arange(n_samples), dd.shape[0]), dd[:,:].reshape([-1]), bins=(n_samples, (dd.max()-dd.min())//2), cmap=plt.cm.jet)
 plt.xlabel("sample")
 plt.ylabel("amplitude [adc]")
 plt.title("channel %i" % ch)
@@ -106,7 +108,6 @@ plt.show()
 '''
 
 # cross-talk
-'''
 ch = 64
 x = []
 y = []

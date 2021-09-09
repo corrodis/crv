@@ -252,11 +252,14 @@ import sys
 #if __name__ == '__main__':
 if True:
     if len(sys.argv) <= 1:
-        print("USAGE python readCRV.py FILENAME")
+        print("USAGE python readCRV.py FILENAME [n-events]")
         sys.exit()
+    n_events = 8
+    if len(sys.argv) > 2:
+        n_events = int(sys.argv[2])
 
     c = CRV(sys.argv[1])
-    c.setNSamples(8)
+    c.setNSamples(n_events)
     c.run(nmax=2000010)
     c.save()
 

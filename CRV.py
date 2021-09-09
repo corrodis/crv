@@ -104,11 +104,12 @@ class CRV:
         self.cmd(cmd)
 
     def readOutput(self, n=1):
-        data = self.readm("21", 20*n, lc=False)
+        data = self.readm("21", 30*n, lc=False)
         if self.verbose:
             for n_ in range(n):
-                print(data[n_*20   :n_*20+10])
-                print(data[n_*20+10:n_*20+20])
+                print(data[n_*30   :n_*30+10])
+                print(data[n_*30+10:n_*30+20])
+                print(data[n_*30+20:n_*30+30])
         return data
 
     def readTriggers(self,n=1):
@@ -150,7 +151,7 @@ class CRV:
         for n_ in range(n//16):
             print(data[n_*16:n_*16+16])
 
-    def rocDdrReadEv(self, add0=True, fpga=1):
+    def rocDdrReadEv(self, add0=True, fpga=1, getStatus=False):
         if add0:
             if self.verbose:
                  print("Reset ROC DDR ("+str(fpga)+") Read address")
@@ -173,6 +174,8 @@ class CRV:
         for ev_ in range(ev):
             print("%i)" % (ev_ + 1), data[ev_*(self.n_sample + 2)+3:(ev_+1)*(self.n_sample + 2)+3])
             out_data.append(data[ev_*(self.n_sample + 2)+3:(ev_+1)*(self.n_sample + 2)+3])
+        if getStatus:
+            return data[0], data[1] + data[2]
         if ev > 0:
             print("filler: ", data[(ev_+1)*(self.n_sample + 2)+3:])
         else:
@@ -196,6 +199,12 @@ class CRV:
         data = self.read(self.febFPGA[fpga]+"02",4, lc=True)
         print("FEB DDR write ("+self.febFPGA[fpga]+"02, "+self.febFPGA[fpga]+"03): ", data[0], data[1])
         print("FEB DDR read  ("+self.febFPGA[fpga]+"04, "+self.febFPGA[fpga]+"05): ", data[2], data[3])
+
+    def febPageClear(self):
+        for fpga in range(4):
+            n_str = self.read("%x" % (fpga*4)+"0D", lc=True)[0]
+            self.readm("%x" % (fpga*4)+"0C", n=int(n_str,16), lc=True)
+            return self.read("317", lc=True)
 
     def febPageRead(self, hi="0", lw="0", fpga=0):
         print("Read FEB ("+str(fpga)+") Page ", hi, lw, end=" ")
@@ -236,6 +245,10 @@ class CRV:
         print("Power cycling all FEB ports")
         self.cmd("PWRRST 25")
 
+    def febGetSample(self):
+        data = self.read("30C", lc=True)
+        return data
+
     def febSetup(self, n_sample=10, port="1"):
         self.n_sample = n_sample
         print("Set external trigger to RJ45")
@@ -250,6 +263,8 @@ class CRV:
         print("    On-spill 0x70 @ 80MHZ (Default is 0x800)")
         self.write("305", "70", lc=True)
         print("    Off-spill 0x800 @ 80Mhz")
+        self.write("304","05",lc=True) 
+        print("Set pipeline delay to 0x05: trigger between  2nd and 3th sample")
         #self.write("306", "800", lc=True)
         self.write("306", "100", lc=True) # USED in Vertical Slice Test, 400 works, 600 doesn't
         print("Number of ADC samples: ", n_sample)
@@ -258,7 +273,14 @@ class CRV:
         self.write("310","0",lc=True)
         self.write("311","0",lc=True)
 
-    def rocSetup(self, tdaq=False, tdaq_timing=False):
+    def rocDdrReset(self):
+        print("Reset DDR read/write addresses")
+        self.write("402","0")
+        self.write("403","0")
+        self.write("404","0")
+        self.write("405","0")
+
+    def rocSetup(self, tdaq=True, tdaq_timing=True, uB_offset="a"):
         print("Test Fiber Connection")
         self.write("0", "8") # reset it
         print(self.read("1"))
@@ -278,14 +300,12 @@ class CRV:
         self.write("2","1")
         print("Reset link reciver FIFO")
         self.write("27", "300")
-        print("Reset DDR read/write addresses")
-        self.write("402","0")
-        self.write("403","0")
-        self.write("404","0")
-        self.write("405","0")
+        self.rocDdrReset()
         if tdaq:
             print("Set TRIG 1")
             self.cmd("TRIG 1")
+        print("Add uB offset of %i" % int(uB_offset,16))
+        self.write("81", uB_offset)
 
 
     def febPedestal(self, fpga=0):
@@ -354,8 +374,8 @@ class CRV:
         cmd = "LP "+port
         self.cmd(cmd)
 
-    def setup(self, n_sample=10, tdaq=False, tdaq_timing=False, gains=[0], nfpga=1, nafe=2, ports=["1"]):
-        self.rocSetup(tdaq=tdaq, tdaq_timing=tdaq_timing)
+    def setup(self, n_sample=8, tdaq=True, tdaq_timing=True, gains=[0], nfpga=1, nafe=2, ports=["1"], uB_offset="a"):
+        self.rocSetup(tdaq=tdaq, tdaq_timing=tdaq_timing, uB_offset=uB_offset)
         self.rocDdrReset()
         for np, port in enumerate(ports):
             self.LP(port)

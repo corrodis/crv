@@ -102,6 +102,8 @@ class CRV:
             cmd += "LC "
         cmd += "RESET"
         self.cmd(cmd)
+        if self.verbose:
+            print("readback: ", self.ser.readline())
 
     def readOutput(self, n=1):
         data = self.readm("21", 30*n, lc=False)
@@ -111,6 +113,26 @@ class CRV:
                 print(data[n_*30+10:n_*30+20])
                 print(data[n_*30+20:n_*30+30])
         return data
+
+    def readOutTrace(self,n=1):
+        data = self.readm("85", 10*n, lc=False)
+        if self.verbose:
+            for n_ in range(n):
+                for d in data[n_*10   :n_*10+10]:
+                    if d == "a050":
+                        print(Fore.RED, d, Style.RESET_ALL, end=" ")
+                    else:
+                        print(d, end=" ")
+                print(" ")
+                #print(data[n_*10   :n_*10+10])
+                #print(data[n_*10+10:n_*10+20])
+
+    def readDReqTrace(self,n=1):
+        data = self.readm("86", 9*n, lc=False)
+        if self.verbose:
+            for n_ in range(n):
+                print(data[n_*9   :n_*9+9])
+                #print(data[n_*9+10:n_*9+20])
 
     def readTriggers(self,n=1):
         data = self.readm("20", 20*n, lc=False)
@@ -150,6 +172,7 @@ class CRV:
         data = self.readm(self.rocFPGA[fpga]+"07", n, lc=False)
         for n_ in range(n//16):
             print(data[n_*16:n_*16+16])
+        return data
 
     def rocDdrReadEv(self, add0=True, fpga=1, getStatus=False):
         if add0:
@@ -244,6 +267,8 @@ class CRV:
     def febPwrCycle(self):
         print("Power cycling all FEB ports")
         self.cmd("PWRRST 25")
+        if self.verbose:
+            print("readback: ", self.ser.readline())
 
     def febGetSample(self):
         data = self.read("30C", lc=True)
@@ -253,6 +278,8 @@ class CRV:
         self.n_sample = n_sample
         print("Set external trigger to RJ45")
         self.cmd("LC TRIG 0")
+        if self.verbose:
+            print("readback: ", self.ser.readline())
         print("Set the port the FEB is connected to: ", port)
         self.write("314",port,lc=True)
         print("Take new pedestral")
@@ -304,6 +331,9 @@ class CRV:
         if tdaq:
             print("Set TRIG 1")
             self.cmd("TRIG 1")
+            if self.verbose:
+                print("readback: ", self.ser.readline())
+                print("readback: ", self.ser.readline())
         print("Add uB offset of %i" % int(uB_offset,16))
         self.write("81", uB_offset)
 
@@ -370,9 +400,55 @@ class CRV:
         self.write("0", "8")
         print(self.read("1"))
 
+    def dcs(self):
+        while True:
+            if int(self.read("51")[0])>0:
+                #return self.cmd("RD2 1")
+                adr = self.readDCS()[3]
+                print("Return ", adr)
+                self.sendDCS(adr, "cafe")
+                break
+
+    def readDCS(self):
+        n = int(self.read("51")[0])
+        if n < 9:
+            print("Only %i words are in the buffer (0x50)." % n)
+            return []
+        else:
+            return self.readm("50",9)
+       
+    def sendDCS(self, add, data):
+        # header
+        dd = ["0010", "8040", "0008", add, data, "0000", "0000", "0000"]
+        self.write("1a", "4") # header K28.0 D4.Y
+        self.write("1c", "0010") # package size, not used
+        self.write("1c", "8040") # valdi, ROC no, type, hops
+        self.write("1c", "0008") # block seq (not used), status, option 0 := Read(s), 1:= Write(s), 2:= Block Read, 3:= Block Write
+        self.write("1c", add)    # op 0: address
+        self.write("1c", data)   # op 0: data   
+        self.write("1c", "0000") # reserved
+        self.write("1c", "0000") # reserved
+        self.write("1c", "0000") # reserved
+        self.write("1e", "0001") # generate CRC and send
+        print(dd)
+
+        self.write("1b", "4") # header K28.0 D4.Y
+        self.write("1d", "0010") # package size, not used
+        self.write("1d", "8040") # valdi, ROC no, type, hops
+        self.write("1d", "0000") # block seq (not used), status, option 0 := Read(s), 1:= Write(s), 2:= Block Read, 3:= Block Write
+        self.write("1d", add)    # op 0: address
+        self.write("1d", data)   # op 0: data   
+        self.write("1d", "0000") # reserved
+        self.write("1d", "0000") # reserved
+        self.write("1d", "0000") # reserved
+        self.write("1f", "0001") # generate CRC and send
+
     def LP(self, port="1"):
         cmd = "LP "+port
         self.cmd(cmd)
+        if self.verbose:
+            print("readback: ", self.ser.readline())
+            print("readback: ", self.ser.readline())
 
     def setup(self, n_sample=8, tdaq=True, tdaq_timing=True, gains=[0], nfpga=1, nafe=2, ports=["1"], uB_offset="a"):
         self.rocSetup(tdaq=tdaq, tdaq_timing=tdaq_timing, uB_offset=uB_offset)
@@ -384,6 +460,7 @@ class CRV:
                 for afe in range(1, nafe):
                    print("DEBUG", afe, fpga)
                    self.febAFEHighGain(gains[np],afe=afe,fpga=fpga)
+        self.write("401","0") # switch off the active numbers
 
     def markerBits(self):
         data = self.read("77", lc=False)
